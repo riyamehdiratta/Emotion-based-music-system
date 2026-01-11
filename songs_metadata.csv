@@ -1,0 +1,33 @@
+song_name,artist,language,emotion,genre,audio_path
+Happy,Pharrell Williams,English,Happy,Pop,static/songs/english/happy.mp3
+Can't Stop the Feeling,Justin Timberlake,English,Happy,Pop,static/songs/english/cant_stop.mp3
+Good Vibrations,The Beach Boys,English,Happy,Pop,static/songs/english/good_vibes.mp3
+Someone Like You,Adele,English,Sad,Pop,static/songs/english/someone_like_you.mp3
+Fix You,Coldplay,English,Sad,Rock,static/songs/english/fix_you.mp3
+All of Me,John Legend,English,Sad,R&B,static/songs/english/all_of_me.mp3
+Killing in the Name,Rage Against the Machine,English,Angry,Rock,static/songs/english/killing_name.mp3
+Break Stuff,Limp Bizkit,English,Angry,Rock,static/songs/english/break_stuff.mp3
+Weightless,Marconi Union,English,Neutral,Ambient,static/songs/english/weightless.mp3
+Strawberry Swing,Coldplay,English,Neutral,Indie,static/songs/english/strawberry_swing.mp3
+Senorita,Vishal-Shekhar,Hindi,Happy,Bollywood,static/songs/hindi/senorita.mp3
+Tum Hi Ho,Arijit Singh,Hindi,Happy,Bollywood,static/songs/hindi/tum_hi_ho.mp3
+Chammak Challo,Akon,Hindi,Happy,Bollywood,static/songs/hindi/chammak_challo.mp3
+Tum Hi Aana,Jubin Nautiyal,Hindi,Sad,Bollywood,static/songs/hindi/tum_hi_aana.mp3
+Tera Ban Jaunga,Akhil Sachdeva,Hindi,Sad,Bollywood,static/songs/hindi/tera_ban.mp3
+Kaise Hua,Vishal Mishra,Hindi,Sad,Bollywood,static/songs/hindi/kaise_hua.mp3
+High Rated Gabru,Guru Randhawa,Punjabi,Happy,Punjabi Pop,static/songs/punjabi/high_rated.mp3
+Lahore,Guru Randhawa,Punjabi,Happy,Punjabi Pop,static/songs/punjabi/lahore.mp3
+Why This Kolaveri Di,Dhanush,Tamil,Happy,Tamil Pop,static/songs/tamil/kolaveri.mp3
+Naan Ready,Anirudh Ravichander,Tamil,Happy,Tamil Pop,static/songs/tamil/naan_ready.mp3
+Enna Solla,A.R. Rahman,Tamil,Sad,Tamil Classical,static/songs/tamil/enna_solla.mp3
+Butta Bomma,Armaan Malik,Telugu,Happy,Telugu Pop,static/songs/telugu/butta_bomma.mp3
+Samajavaragamana,Sid Sriram,Telugu,Happy,Telugu Pop,static/songs/telugu/samajavaragamana.mp3
+Dynamite,BTS,Korean,Happy,K-Pop,static/songs/korean/dynamite.mp3
+Gangnam Style,PSY,Korean,Happy,K-Pop,static/songs/korean/gangnam_style.mp3
+Spring Day,BTS,Korean,Sad,K-Pop,static/songs/korean/spring_day.mp3
+Despacito,Luis Fonsi,Spanish,Happy,Latin Pop,static/songs/spanish/despacito.mp3
+Bailando,Enrique Iglesias,Spanish,Happy,Latin Pop,static/songs/spanish/bailando.mp3
+Bohemian Rhapsody,Queen,English,Surprise,Rock,static/songs/english/bohemian.mp3
+Thunder,Imagine Dragons,English,Surprise,Rock,static/songs/english/thunder.mp3
+Thriller,Michael Jackson,English,Fear,Pop,static/songs/english/thriller.mp3
+Bad Guy,Billie Eilish,English,Disgust,Pop,static/songs/english/bad_guy.mp3
