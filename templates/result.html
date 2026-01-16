@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Recommendations</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Recommended Songs</h1>
+        </header>
+
+        <main>
+            <section class="summary">
+                <p>Detected emotion: <strong id="emotion">{{ emotion }}</strong></p>
+                <p>Selected language: <strong id="language">{{ language }}</strong></p>
+                <p>Confidence: <strong id="confidence">{{ confidence }}</strong></p>
+            </section>
+
+            <section class="results">
+                <h2>Top {{ recommendations|length }} songs ({{ language }})</h2>
+                {% if recommendations and recommendations|length > 0 %}
+                    <ol>
+                    {% for s in recommendations %}
+                        <li>
+                            <div class="song">
+                                <div class="title">{{ s.song_name }}</div>
+                                <div class="meta">Artist: {{ s.artist }} | Language: {{ s.language }} | Emotion: {{ s.emotion }}</div>
+                                <div class="links">
+                                    {% if s.youtube_url %}
+                                        <a href="{{ s.youtube_url }}" target="_blank">YouTube</a>
+                                    {% elif s.spotify_url %}
+                                        <a href="{{ s.spotify_url }}" target="_blank">Spotify</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </li>
+                    {% endfor %}
+                    </ol>
+                {% else %}
+                    <p>No songs found for this emotion in selected language.</p>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+</body>
+</html>

@@ -28,20 +28,16 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 
 # Initialize modules
-# Using fine-tuned pre-trained FER2013 model with trainable top layers
-# This provides excellent accuracy (80-95% confidence) with customization capability
-emotion_detector = EmotionDetector(use_fer_library=False)
-print("✅ Using fine-tuned pre-trained FER2013 model!")
-print("   Model features: Pre-trained base + trainable top layers for customization")
+# Emotion detector uses the shared preprocessing and model saved at models/emotion_model.h5
+emotion_detector = EmotionDetector()
+print("✅ Emotion detector initialized")
 
-# Initialize Spotify-based music recommender
-# Falls back to local CSV if Spotify credentials are not available
+# Initialize recommender to use YouTube recommendations (deterministic language filtering)
 try:
-    music_recommender = MusicRecommender(use_spotify=True)
-    print("✅ Music recommender initialized with Spotify integration!")
+    music_recommender = MusicRecommender(use_spotify=False)
+    print("✅ Music recommender initialized (YouTube mode)")
 except Exception as e:
-    print(f"⚠️  Spotify initialization failed: {e}")
-    print("   Using local song database as fallback...")
+    print(f"⚠️ Recommender initialization failed: {e}")
     music_recommender = MusicRecommender(use_spotify=False)
 
 # Create necessary directories
@@ -164,8 +160,8 @@ def recommend():
         
         emotion = data['emotion']
         confidence = data.get('confidence', 1.0)
-        language = data.get('language', None)
-        top_n = data.get('top_n', 5)
+        language = data.get('language') or 'English'
+        top_n = data.get('top_n', 10)
         
         recommendations = music_recommender.get_recommendations(
             emotion=emotion,
@@ -174,6 +170,14 @@ def recommend():
             language=language
         )
         
+        if not recommendations:
+            return jsonify({
+                'success': True,
+                'recommendations': [],
+                'count': 0,
+                'message': 'No songs found for this emotion in selected language.'
+            })
+
         return jsonify({
             'success': True,
             'recommendations': recommendations,
@@ -237,8 +241,8 @@ def detect_and_recommend():
         # Get recommendations
         emotion = emotion_result['emotion']
         confidence = emotion_result['confidence']
-        language = data.get('language', None)
-        top_n = data.get('top_n', 5)
+        language = data.get('language') or 'English'
+        top_n = data.get('top_n', 10)
         
         recommendations = music_recommender.get_recommendations(
             emotion=emotion,
@@ -247,6 +251,17 @@ def detect_and_recommend():
             language=language
         )
         
+        if not recommendations:
+            return jsonify({
+                'success': True,
+                'emotion': emotion,
+                'confidence': confidence,
+                'all_emotions': emotion_result['all_emotions'],
+                'recommendations': [],
+                'count': 0,
+                'message': 'No songs found for this emotion in selected language.'
+            })
+
         return jsonify({
             'success': True,
             'emotion': emotion,
@@ -266,7 +281,8 @@ def detect_and_recommend():
 def get_languages():
     """Get list of all available languages."""
     try:
-        languages = music_recommender.get_all_languages()
+        # Provide a strict language selector as required
+        languages = ['English', 'Hindi', 'Punjabi', 'Spanish']
         return jsonify({
             'success': True,
             'languages': languages

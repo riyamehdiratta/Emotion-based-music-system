@@ -6,6 +6,13 @@ Recommends REAL songs from Spotify based on detected emotion with multi-language
 import os
 from typing import List, Dict, Optional
 from spotify_client import SpotifyClient
+from youtube_client import YouTubeClient
+import pandas as pd
+
+
+# Required dataset columns
+REQUIRED_COLUMNS = {'song_name', 'artist', 'language', 'emotion'}
+URL_COLUMNS = {'youtube_url', 'spotify_url'}
 
 class MusicRecommender:
     """
@@ -48,6 +55,7 @@ class MusicRecommender:
         self.playlist_id = playlist_id or os.getenv('SPOTIFY_PLAYLIST_ID', self.DEFAULT_PLAYLIST_ID)
         self.use_playlist = os.getenv('USE_SPOTIFY_PLAYLIST', 'false').lower() == 'true'
         
+        # Initialize Spotify if requested
         if use_spotify:
             try:
                 self.spotify_client = SpotifyClient()
@@ -59,21 +67,63 @@ class MusicRecommender:
                 print("   Falling back to local song database...")
                 self.use_spotify = False
                 self._init_local_fallback()
-        else:
-            self._init_local_fallback()
+
+        # Initialize YouTube client for strict language recommendations
+        try:
+            self.youtube_client = YouTubeClient()
+            print("✅ YouTube client initialized")
+        except Exception as e:
+            self.youtube_client = None
+            print(f"⚠️ YouTube client not initialized: {e}")
+        # Always attempt to load local dataset once (used as fallback and for strict language lists)
+        self.songs_df = None
+        self.metadata_path = 'songs_metadata.csv'
+        self._init_local_fallback()
     
     def _init_local_fallback(self):
         """Initialize local CSV fallback (original implementation)."""
-        # Keep original CSV loading as fallback
-        import pandas as pd
-        self.metadata_path = 'songs_metadata.csv'
-        self.songs_df = None
+        # Load CSV or JSON dataset once and validate columns
         try:
             if os.path.exists(self.metadata_path):
-                self.songs_df = pd.read_csv(self.metadata_path)
-                print(f"✅ Loaded {len(self.songs_df)} songs from local database")
+                df = pd.read_csv(self.metadata_path)
+            else:
+                # try json
+                json_path = self.metadata_path.replace('.csv', '.json')
+                if os.path.exists(json_path):
+                    df = pd.read_json(json_path)
+                else:
+                    df = pd.DataFrame()
+
+            # Validate columns
+            if not df.empty:
+                cols = set(df.columns.str.lower())
+                missing = REQUIRED_COLUMNS - set([c.lower() for c in df.columns])
+                if missing:
+                    print(f"⚠️  Dataset missing required columns: {missing}")
+                    self.songs_df = pd.DataFrame(columns=list(REQUIRED_COLUMNS) + list(URL_COLUMNS))
+                else:
+                    # Normalize column names to expected casing
+                    df.columns = [c.lower() for c in df.columns]
+                    # Ensure url columns exist
+                    for u in URL_COLUMNS:
+                        if u not in df.columns:
+                            df[u] = None
+                    # Standardize language and emotion capitalization
+                    df['language'] = df['language'].astype(str).str.strip()
+                    df['emotion'] = df['emotion'].astype(str).str.strip()
+                    self.songs_df = df.rename(columns={
+                        'song_name': 'song_name',
+                        'artist': 'artist',
+                        'language': 'language',
+                        'emotion': 'emotion'
+                    })
+                    print(f"✅ Loaded {len(self.songs_df)} songs from local database")
+            else:
+                print("⚠️  No local dataset found; songs_df initialized empty")
+                self.songs_df = pd.DataFrame(columns=list(REQUIRED_COLUMNS) + list(URL_COLUMNS))
         except Exception as e:
             print(f"⚠️  Could not load local database: {e}")
+            self.songs_df = pd.DataFrame(columns=list(REQUIRED_COLUMNS) + list(URL_COLUMNS))
     
     def get_genres_for_emotion(self, emotion: str) -> List[str]:
         """
@@ -85,7 +135,20 @@ class MusicRecommender:
         Returns:
             List of genre strings
         """
-        return self.EMOTION_GENRE_MAP.get(emotion, ['pop'])  # Default to pop
+        if not emotion:
+            return ['pop']
+
+        key = emotion.strip().capitalize()
+        # Special handling: Neutral/Uncertain should map to uplifting genres
+        # Neutral does not mean sad — recommending uplifting content improves engagement
+        if key in ('Neutral', 'Uncertain'):
+            # Combine Happy + Neutral (chill/upbeat) genres and dedupe
+            happy = self.EMOTION_GENRE_MAP.get('Happy', [])
+            neutral = self.EMOTION_GENRE_MAP.get('Neutral', [])
+            combined = list(dict.fromkeys(happy + neutral))
+            return combined
+
+        return self.EMOTION_GENRE_MAP.get(key, ['pop'])  # Default to pop
     
     def get_recommendations(self, emotion: str, confidence: float = 1.0, 
                           top_n: int = 5, language: Optional[str] = None) -> List[Dict]:
@@ -102,10 +165,104 @@ class MusicRecommender:
         Returns:
             List of song dictionaries with Spotify metadata
         """
+        # Prefer YouTube deterministic recommendations if client available
+        if self.youtube_client:
+            return self._get_youtube_recommendations(emotion, confidence, top_n, language)
         if self.use_spotify and self.spotify_client:
             return self._get_spotify_recommendations(emotion, confidence, top_n, language)
+        return self._get_local_recommendations(emotion, confidence, top_n, language)
+
+    def _language_keyword(self, language: Optional[str]) -> Optional[str]:
+        if not language:
+            return None
+        # Standardize language keywords
+        mapping = {
+            'english': 'English',
+            'hindi': 'Hindi',
+            'punjabi': 'Punjabi',
+            'spanish': 'Spanish'
+        }
+        key = language.strip().lower()
+        return mapping.get(key, language)
+
+    def _get_youtube_recommendations(self, emotion: str, confidence: float, top_n: int, language: Optional[str]) -> List[Dict]:
+        """
+        Strict language-based YouTube recommendations.
+        Query format: emotion + mood + "song" + selected_language
+        Strict filter: title OR channel name must contain the language keyword.
+        Ranking: emotion-to-mood match, search relevance (order), view count.
+        """
+        if not self.youtube_client:
+            return []
+
+        # Build mood words from genres map
+        moods = self.get_genres_for_emotion(emotion)
+        mood_phrase = moods[0] if moods else ''
+
+        lang_keyword = self._language_keyword(language)
+        # Build deterministic query
+        q_parts = [emotion.lower(), mood_phrase.lower(), 'song']
+        if lang_keyword:
+            q_parts.append(lang_keyword.lower())
+        query = ' '.join([p for p in q_parts if p])
+
+        videos = self.youtube_client.search_videos(query, max_results=50)
+        if not videos:
+            return []
+
+        # Strict filtering: title or channel must contain language keyword
+        if lang_keyword:
+            filtered = []
+            for v in videos:
+                title = (v.get('title') or '').lower()
+                channel = (v.get('channel_title') or '').lower()
+                if lang_keyword.lower() in title or lang_keyword.lower() in channel:
+                    filtered.append(v)
         else:
-            return self._get_local_recommendations(emotion, confidence, top_n, language)
+            filtered = videos
+
+        if not filtered:
+            return []
+
+        # Scoring
+        # Mood match: presence of mood keywords in title/description
+        scored = []
+        max_views = max([v['viewCount'] for v in filtered]) if filtered else 1
+        for rank, v in enumerate(filtered):
+            title = (v.get('title') or '').lower()
+            desc = (v.get('description') or '').lower()
+            mood_score = 0.0
+            for m in moods:
+                if m.lower() in title or m.lower() in desc:
+                    mood_score = 1.0
+                    break
+
+            # Relevance score approximated by inverse rank
+            relevance = 1.0 - (rank / max(1, len(filtered) - 1)) if len(filtered) > 1 else 1.0
+            view_norm = (v['viewCount'] / max_views) if max_views > 0 else 0.0
+
+            recommendation_score = 0.5 * mood_score + 0.3 * relevance + 0.2 * view_norm
+            scored.append((recommendation_score, v))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = [v for _, v in scored[:top_n]]
+
+        results = []
+        for v in top:
+            results.append({
+                'song_name': v.get('title'),
+                'artist': v.get('channel_title'),
+                'language': lang_keyword or 'Unknown',
+                'emotion': emotion,
+                'genre': mood_phrase,
+                'youtube_id': v.get('id'),
+                'youtube_url': v.get('url'),
+                'thumbnail': (v.get('thumbnails') or {}).get('high', {}).get('url') if v.get('thumbnails') else None,
+                'view_count': v.get('viewCount'),
+                'recommendation_score': None
+            })
+
+        return results
     
     def _get_spotify_recommendations(self, emotion: str, confidence: float,
                                    top_n: int, language: Optional[str]) -> List[Dict]:
@@ -256,48 +413,83 @@ class MusicRecommender:
         Returns:
             List of song dictionaries
         """
+        # Ensure songs_df is present and non-empty
         if self.songs_df is None or len(self.songs_df) == 0:
             return []
-        
-        # Filter by emotion (case-insensitive)
-        emotion_lower = emotion.lower() if emotion else ''
-        filtered = self.songs_df[
-            self.songs_df['emotion'].str.lower() == emotion_lower
-        ].copy()
-        
-        # Filter by language if specified
-        if language:
-            filtered = filtered[filtered['language'].str.lower() == language.lower()]
-        
-        # If no results, return any songs
-        if len(filtered) == 0:
-            filtered = self.songs_df.copy()
-        
-        # Calculate recommendation score
-        filtered['recommendation_score'] = confidence
-        
-        # Sort by recommendation score
-        filtered = filtered.sort_values('recommendation_score', ascending=False)
-        
-        # Get top N recommendations
-        top_songs = filtered.head(top_n)
-        
-        # Convert to list of dictionaries
+
+        # Default language to English if not provided
+        if not language:
+            language = 'English'
+
+        # 1) Filter by emotion (case-insensitive)
+        emotion_lower = (emotion or '').strip().lower()
+
+        # Special-case: Neutral or Uncertain -> treat as request for uplifting content
+        if emotion_lower in ('neutral', 'uncertain'):
+            # Map to happy + chill genres; prefer songs labeled 'Happy' OR songs whose genre contains uplifting keywords
+            uplifting_emotions = ['happy']
+            uplift_keywords = ['chill', 'lofi', 'upbeat', 'pop', 'dance', 'indie']
+
+            # Songs explicitly labeled as 'Happy'
+            df_emotion = self.songs_df[self.songs_df['emotion'].str.strip().str.lower().isin(uplifting_emotions)].copy()
+            # If genre column exists, include songs whose genre matches uplifting keywords
+            if 'genre' in self.songs_df.columns:
+                mask = self.songs_df['genre'].astype(str).str.lower().apply(lambda g: any(k in g for k in uplift_keywords))
+                df_genre_uplift = self.songs_df[mask].copy()
+                # union
+                df_emotion = pd.concat([df_emotion, df_genre_uplift]).drop_duplicates()
+        else:
+            df_emotion = self.songs_df[self.songs_df['emotion'].str.strip().str.lower() == emotion_lower].copy()
+
+        # If no songs for this emotion, return empty (caller will handle fallback message)
+        if df_emotion.empty:
+            return []
+
+        # 2) Filter by selected language (strict, case-insensitive)
+        lang_lower = language.strip().lower()
+        df_lang = df_emotion[df_emotion['language'].str.strip().str.lower() == lang_lower].copy()
+
+        # If no songs exist for emotion+language, return empty to allow fallback handling
+        if df_lang.empty:
+            return []
+
+        # 3) Sort by relevance_score (if present), then popularity/viewCount, desc
+        sort_keys = []
+        if 'relevance_score' in df_lang.columns:
+            sort_keys.append('relevance_score')
+        # common popularity columns
+        pop_col = None
+        for c in ['popularity', 'viewcount', 'view_count', 'views']:
+            if c in df_lang.columns:
+                pop_col = c
+                break
+        if pop_col:
+            sort_keys.append(pop_col)
+
+        if sort_keys:
+            df_lang = df_lang.sort_values(by=sort_keys, ascending=False)
+        else:
+            # fallback: alphabetical by song_name
+            df_lang = df_lang.sort_values(by='song_name')
+
+        # 4) Select TOP 10 only
+        top_n = min(10, top_n)
+        top_songs = df_lang.head(top_n)
+
+        # Convert to list of dictionaries and ensure required fields
         recommendations = []
         for _, row in top_songs.iterrows():
-            song_dict = {
-                'song_name': row['song_name'],
-                'artist': row['artist'],
-                'language': row['language'],
-                'emotion': row['emotion'],
-                'genre': row.get('genre', 'Unknown'),
-                'audio_path': row.get('audio_path', ''),
-                'recommendation_score': row['recommendation_score'],
-                'spotify_url': None,  # No Spotify for local tracks
-                'album_art': None
-            }
-            recommendations.append(song_dict)
-        
+            recommendations.append({
+                'song_name': row.get('song_name'),
+                'artist': row.get('artist'),
+                'language': row.get('language'),
+                'emotion': row.get('emotion'),
+                'youtube_url': row.get('youtube_url') if 'youtube_url' in row.index else None,
+                'spotify_url': row.get('spotify_url') if 'spotify_url' in row.index else None,
+                'genre': row.get('genre', None),
+                'recommendation_score': row.get('relevance_score') if 'relevance_score' in row.index else None
+            })
+
         return recommendations
     
     def get_all_languages(self) -> List[str]:

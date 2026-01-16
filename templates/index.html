@@ -60,6 +60,8 @@
                     </div>
                 </div>
 
+                <!-- Language will be selected AFTER emotion detection to enforce user flow -->
+
                 <button id="detect-btn" class="btn btn-primary btn-large" onclick="detectEmotion()" disabled>
                     🔍 Detect Emotion
                 </button>
@@ -71,9 +73,10 @@
                 <div class="emotion-display">
                     <div class="emotion-icon" id="emotion-icon">😊</div>
                     <div class="emotion-info">
-                        <h3 id="emotion-name">Happy</h3>
-                        <p class="confidence">Confidence: <span id="confidence-score">85%</span></p>
-                    </div>
+                            <h3 id="emotion-name">Happy</h3>
+                            <p class="confidence">Confidence: <span id="confidence-score">85%</span></p>
+                            <p class="selected-language">Selected language: <span id="selected-language">None</span></p>
+                        </div>
                 </div>
                 <div class="all-emotions" id="all-emotions"></div>
             </section>
@@ -82,7 +85,10 @@
             <section id="language-section" class="filter-section" style="display: none;">
                 <h2>3. Choose Language (Optional)</h2>
                 <select id="language-filter" class="language-select" onchange="filterByLanguage()">
-                    <option value="">All Languages</option>
+                    <option value="English">English</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Punjabi">Punjabi</option>
+                    <option value="Spanish">Spanish</option>
                 </select>
             </section>
 

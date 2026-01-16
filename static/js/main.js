@@ -187,15 +187,13 @@ async function detectEmotion() {
     detectBtn.innerHTML = '<span class="loading"></span> Detecting...';
     
     try {
-        const response = await fetch('/api/detect-and-recommend', {
+        const response = await fetch('/api/detect-emotion', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                image_data: currentImageData,
-                language: selectedLanguage || null,
-                top_n: 5
+                image_data: currentImageData
             })
         });
         
@@ -203,7 +201,7 @@ async function detectEmotion() {
         
         if (data.success) {
             displayEmotionResult(data);
-            displayRecommendations(data.recommendations);
+            // Do not fetch recommendations yet — user must select language
         } else {
             alert('Error: ' + (data.error || 'Could not detect emotion'));
         }
@@ -263,6 +261,7 @@ function displayRecommendations(recommendations) {
         
         // Check if this is a Spotify track
         const isSpotify = song.spotify_url || song.spotify_id;
+        const isYouTube = song.youtube_url || song.youtube_id;
         
         // Album art or placeholder
         const albumArt = song.album_art || 'https://via.placeholder.com/150?text=No+Image';
@@ -289,7 +288,9 @@ function displayRecommendations(recommendations) {
                 ` : ''}
             </div>
             <div class="audio-player">
-                ${isSpotify && song.spotify_id ? 
+                ${isYouTube && song.youtube_id ?
+                    `<iframe width="100%" height="200" src="https://www.youtube.com/embed/${song.youtube_id}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+                    : isSpotify && song.spotify_id ?
                     `<iframe 
                         src="https://open.spotify.com/embed/track/${song.spotify_id}?utm_source=generator&theme=0" 
                         width="100%" 
@@ -298,12 +299,12 @@ function displayRecommendations(recommendations) {
                         allowfullscreen="" 
                         allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
                         loading="lazy">
-                    </iframe>` 
-                    : song.audio_path ? 
+                    </iframe>`
+                    : song.audio_path ?
                     `<audio controls>
                         <source src="/${song.audio_path}" type="audio/mpeg">
                         Your browser does not support the audio element.
-                    </audio>` 
+                    </audio>`
                     : '<p style="color: #999; font-size: 0.9em;">Preview not available</p>'
                 }
             </div>
@@ -349,13 +350,19 @@ async function loadLanguages() {
         const data = await response.json();
         
         if (data.success) {
-            const languageSelect = document.getElementById('language-filter');
-            data.languages.forEach(lang => {
-                const option = document.createElement('option');
-                option.value = lang;
-                option.textContent = lang;
-                languageSelect.appendChild(option);
-            });
+                const languageFilter = document.getElementById('language-filter');
+                // Populate language dropdown that appears AFTER detection
+                data.languages.forEach(lang => {
+                    const option = document.createElement('option');
+                    option.value = lang;
+                    option.textContent = lang;
+                    if (languageFilter) languageFilter.appendChild(option.cloneNode(true));
+                });
+                // Default to English when available
+                if (languageFilter) {
+                    languageFilter.value = 'English';
+                    selectedLanguage = 'English';
+                }
         }
     } catch (error) {
         console.error('Error loading languages:', error);
@@ -390,5 +397,12 @@ function filterByLanguage() {
             console.error('Error:', error);
         });
     }
+}
+
+function onLanguageSelect() {
+    const v = document.getElementById('language-filter').value;
+    selectedLanguage = v;
+    const disp = document.getElementById('selected-language');
+    if (disp) disp.textContent = v || 'None';
 }
 
